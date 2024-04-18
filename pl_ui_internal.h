@@ -677,14 +677,12 @@ typedef struct _plUiContext
     plUiInputTextState tInputTextState;
     uint32_t           uHoveredId;             // set at the end of the previous frame from uNextHoveredId
     uint32_t           uActiveId;              // set at the end of the previous frame from uNextActiveId
+    uint32_t           uActiveIdIsAlive;
     uint32_t           uNextHoveredId;         // set during current frame (by end of frame, should be last item hovered)
-    uint32_t           uNextActiveId;          // set during current frame (by end of frame, should be last item active)
 
     uint32_t           uActiveWindowId;               // current active window id
     bool               bActiveIdJustActivated;        // window was just activated, so bring it to the front
-    bool               bWantCaptureKeyboardNextFrame; // we want the mouse
-    bool               bWantCaptureMouseNextFrame;    // wen want the mouse next frame
-    
+
     // windows
     plUiWindow         tTooltipWindow;         // persistent tooltip window (since there can only ever be 1 at a time)
     plUiWindow*        ptCurrentWindow;        // current window we are appending into
@@ -725,10 +723,6 @@ typedef struct _plUiContext
     uint32_t*       sbuLogEntries; // indices into sbcLogBuffer
     plDebugLogFlags tDebugLogFlags;
 
-    // config file
-    float fConfigFileDirtyTimer; // write out to disk when this reaches zero
-    char* sbcConfigFileData;
-
     // memory
     uint32_t uMemoryAllocations;
 
@@ -765,8 +759,11 @@ void                 pl_advance_cursor     (float fWidth, float fHeight);
 bool pl_begin_window_ex (const char* pcName, bool* pbOpen, plUiWindowFlags tFlags);
 void pl_render_scrollbar(plUiWindow* ptWindow, uint32_t uHash, plUiAxis tAxis);
 void pl_submit_window   (plUiWindow* ptWindow);
+void pl__focus_window   (plUiWindow* ptWindow);
 
 static inline bool   pl__ui_should_render(const plVec2* ptStartPos, const plVec2* ptWidgetSize) { return !(ptStartPos->y + ptWidgetSize->y < gptCtx->ptCurrentWindow->tPos.y || ptStartPos->y > gptCtx->ptCurrentWindow->tPos.y + gptCtx->ptCurrentWindow->tSize.y); }
+
+void pl__set_active_id(uint32_t uHash, plUiWindow* ptWindow);
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~text state system~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -206,53 +206,6 @@ pl_clear_input_characters(void)
     plu_sb_reset(gptCtx->tIO._sbInputQueueCharacters);
 }
 
-void
-pl_load_config_file(const char* pcFileName)
-{
-    FILE* ptConfigFile = fopen(pcFileName, "rb");
-    if(ptConfigFile == NULL)
-        return;
-    
-    // obtain file size
-    fseek(ptConfigFile, 0, SEEK_END);
-    const size_t szSize = (size_t)ftell(ptConfigFile);
-    fseek(ptConfigFile, 0, SEEK_SET);
-
-    plu_sb_resize(gptCtx->sbcConfigFileData, (uint32_t)szSize);
-
-    // copy the file into the buffer:
-    size_t szResult = fread(gptCtx->sbcConfigFileData, sizeof(char), szSize, ptConfigFile);
-    if (szResult != szSize)
-    {
-        if (feof(ptConfigFile))
-        {
-            PL_UI_ASSERT(false && "Error reading: unexpected end of file");
-        }
-        else if (ferror(ptConfigFile))
-        {
-            PL_UI_ASSERT(false && "Error reading");
-        }
-        PL_UI_ASSERT(false && "File not read");
-    }
-
-    fclose(ptConfigFile);
-}
-
-void
-pl_save_config_file(const char* pcFileName)
-{
-    if(plu_sb_size(gptCtx->sbcConfigFileData) > 0)
-    {
-        FILE* ptConfigFile = fopen(pcFileName, "wb");
-        if(ptConfigFile == NULL)
-            return;
-
-        fwrite(gptCtx->sbcConfigFileData, sizeof(char), plu_sb_size(gptCtx->sbcConfigFileData), ptConfigFile);
-        fclose(ptConfigFile);  
-    }
-    gptCtx->fConfigFileDirtyTimer = gptCtx->tIO.fConfigSavingRate;
-}
-
 bool
 pl_is_key_down(plKey tKey)
 {
@@ -421,8 +374,6 @@ pl_create_context(void)
     gptCtx->tIO.fMouseDragThreshold      = 6.0f;
     gptCtx->tIO.fKeyRepeatDelay          = 0.275f;
     gptCtx->tIO.fKeyRepeatRate           = 0.050f;
-    gptCtx->tIO.fConfigSavingRate        = 5.0f;
-    gptCtx->tIO.pcConfigFileName         = "pl_config.ini";
     
     gptCtx->tIO.afMainFramebufferScale[0] = 1.0f;
     gptCtx->tIO.afMainFramebufferScale[1] = 1.0f;
@@ -436,8 +387,6 @@ pl_create_context(void)
     gptCtx->tFrameBufferScale.x = 1.0f;
     gptCtx->tFrameBufferScale.y = 1.0f;
     pl_set_dark_theme();
-
-    pl_load_config_file(gptCtx->tIO.pcConfigFileName);
 
     return gptCtx;
 }
@@ -529,15 +478,6 @@ void
 pl_new_frame(void)
 {
 
-    // track click ownership
-    for(uint32_t i = 0; i < 5; i++)
-    {
-        if(gptCtx->tIO._abMouseClicked[i])
-        {
-            gptCtx->tIO._abMouseOwned[i] = (gptCtx->ptHoveredWindow != NULL);
-        }
-    }
-
     // update IO structure
     gptCtx->tIO.dTime += (double)gptCtx->tIO.fDeltaTime;
     gptCtx->tIO.ulFrameCount++;
@@ -545,12 +485,6 @@ pl_new_frame(void)
     gptCtx->tIO.bWantTextInput = false;
     gptCtx->tIO.bWantCaptureMouse = false;
     gptCtx->tIO.bWantCaptureKeyboard = false;
-    gptCtx->fConfigFileDirtyTimer -= gptCtx->tIO.fDeltaTime;
-
-    if(gptCtx->fConfigFileDirtyTimer < 0.0f)
-    {
-        pl_save_config_file(gptCtx->tIO.pcConfigFileName);
-    }
 
     // calculate frame rate
     gptCtx->tIO._fFrameRateSecPerFrameAccum += gptCtx->tIO.fDeltaTime - gptCtx->tIO._afFrameRateSecPerFrame[gptCtx->tIO._iFrameRateSecPerFrameIdx];
@@ -561,9 +495,51 @@ pl_new_frame(void)
     if(gptCtx->tIO._fFrameRateSecPerFrameAccum > 0)
         gptCtx->tIO.fFrameRate = ((float) gptCtx->tIO._iFrameRateSecPerFrameCount) / gptCtx->tIO._fFrameRateSecPerFrameAccum;
 
+    // handle events
     pl__update_events();
     pl__update_keyboard_inputs();
     pl__update_mouse_inputs();
+
+    // update state id's from previous frame
+    gptCtx->uHoveredId = gptCtx->uNextHoveredId;
+    gptCtx->uNextHoveredId = 0;
+    gptCtx->tIO.bWantCaptureKeyboard = gptCtx->uActiveId != 0;
+    gptCtx->tIO.bWantCaptureMouse = gptCtx->tIO._abMouseOwned[0] || gptCtx->uActiveId != 0 || gptCtx->ptMovingWindow != NULL;
+
+    // null starting state
+    gptCtx->bActiveIdJustActivated = false;
+    
+    // reset previous item data
+    gptCtx->tPrevItemData.bHovered = false;
+
+    // reset next window data
+    gptCtx->tNextWindowData.tFlags = PL_NEXT_WINDOW_DATA_FLAGS_NONE;
+    gptCtx->tNextWindowData.tCollapseCondition = PL_UI_COND_NONE;
+    gptCtx->tNextWindowData.tPosCondition = PL_UI_COND_NONE;
+    gptCtx->tNextWindowData.tSizeCondition = PL_UI_COND_NONE;
+
+    // reset active window
+    if(pl_is_mouse_clicked(PL_MOUSE_BUTTON_LEFT, false) && gptCtx->ptHoveredWindow == NULL)
+        gptCtx->uActiveWindowId = 0;
+
+    // reset active id if no longer alive
+    if(gptCtx->uActiveId != 0 && gptCtx->uActiveIdIsAlive != gptCtx->uActiveId)
+    {
+        pl__set_active_id(0, NULL);
+    }
+    gptCtx->uActiveIdIsAlive = 0;
+
+    if(gptCtx->uActiveWindowId == 0)
+        gptCtx->ptActiveWindow = NULL;
+
+    // track click ownership
+    for(uint32_t i = 0; i < 5; i++)
+    {
+        if(gptCtx->tIO._abMouseClicked[i])
+        {
+            gptCtx->tIO._abMouseOwned[i] = (gptCtx->ptHoveredWindow != NULL);
+        }
+    }
 
     // reset drawlists
     for(uint32_t i = 0u; i < plu_sb_size(gptCtx->sbDrawlists); i++)
@@ -587,9 +563,19 @@ pl_new_frame(void)
     }
 
     gptCtx->frameCount++;
+}
 
-    if(pl_is_mouse_down(PL_MOUSE_BUTTON_LEFT))
-        gptCtx->uNextActiveId = gptCtx->uActiveId;
+void
+pl__focus_window(plUiWindow* ptWindow)
+{
+    
+    plu_sb_del(gptCtx->sbptFocusedWindows, ptWindow->ptRootWindow->uFocusOrder);
+    for(uint32_t i = 0; i < plu_sb_size(gptCtx->sbptFocusedWindows); i++)
+    {
+        gptCtx->sbptFocusedWindows[i]->uFocusOrder = i;
+    }
+    ptWindow->ptRootWindow->uFocusOrder = plu_sb_size(gptCtx->sbptFocusedWindows);
+    plu_sb_push(gptCtx->sbptFocusedWindows, ptWindow->ptRootWindow);
 }
 
 void
@@ -597,39 +583,6 @@ pl_end_frame(void)
 {
 
     const plVec2 tMousePos = pl_get_mouse_pos();
-
-    // update state id's from previous frame
-    gptCtx->uHoveredId = gptCtx->uNextHoveredId;
-    gptCtx->uActiveId = gptCtx->uNextActiveId;
-    gptCtx->tIO.bWantCaptureKeyboard = gptCtx->bWantCaptureKeyboardNextFrame;
-    gptCtx->tIO.bWantCaptureMouse = gptCtx->bWantCaptureMouseNextFrame || gptCtx->tIO._abMouseOwned[0] || gptCtx->uActiveId != 0 || gptCtx->ptMovingWindow != NULL;
-
-    // null starting state
-    gptCtx->bActiveIdJustActivated = false;
-    gptCtx->bWantCaptureMouseNextFrame = false;
-    gptCtx->ptHoveredWindow = NULL;
-    gptCtx->ptActiveWindow = NULL;
-    gptCtx->ptWheelingWindow = NULL;
-    gptCtx->uNextHoveredId = 0u;
-    gptCtx->uNextActiveId = 0u;
-    gptCtx->tPrevItemData.bHovered = false;
-    gptCtx->tNextWindowData.tFlags = PL_NEXT_WINDOW_DATA_FLAGS_NONE;
-    gptCtx->tNextWindowData.tCollapseCondition = PL_UI_COND_NONE;
-    gptCtx->tNextWindowData.tPosCondition = PL_UI_COND_NONE;
-    gptCtx->tNextWindowData.tSizeCondition = PL_UI_COND_NONE;
-
-    if(pl_is_mouse_released(PL_MOUSE_BUTTON_LEFT))
-    {
-        gptCtx->bWantCaptureMouseNextFrame = false;
-        gptCtx->ptMovingWindow = NULL;
-        gptCtx->ptSizingWindow = NULL;
-        gptCtx->ptScrollingWindow = NULL;
-        gptCtx->ptActiveWindow = NULL;
-    }
-
-    // reset active window
-    if(pl_is_mouse_clicked(PL_MOUSE_BUTTON_LEFT, false))
-        gptCtx->uActiveWindowId = 0;
 
     // submit windows in display order
     plu_sb_reset(gptCtx->sbptWindows);
@@ -651,16 +604,72 @@ pl_end_frame(void)
         }
     }
 
-    // move newly activated window to front of focus order
-    if(gptCtx->bActiveIdJustActivated)
+    // find windows
+    gptCtx->ptHoveredWindow = NULL;
+    gptCtx->ptWheelingWindow = NULL;
+    if(pl_is_mouse_released(PL_MOUSE_BUTTON_LEFT))
     {
-        plu_sb_top(gptCtx->sbptFocusedWindows)->uFocusOrder = gptCtx->ptActiveWindow->uFocusOrder;
-        gptCtx->ptActiveWindow->uFocusOrder = plu_sb_size(gptCtx->sbptFocusedWindows) - 1;
-        plu_sb_del_swap(gptCtx->sbptFocusedWindows, plu_sb_top(gptCtx->sbptFocusedWindows)->uFocusOrder);
-        plu_sb_push(gptCtx->sbptFocusedWindows, gptCtx->ptActiveWindow);
+        gptCtx->ptMovingWindow = NULL;
+        gptCtx->ptSizingWindow = NULL;
+        gptCtx->ptScrollingWindow = NULL;  
     }
 
-    // scrolling window
+    for(uint32_t i = 0; i < plu_sb_size(gptCtx->sbptWindows); i++)
+    {
+        plUiWindow* ptWindow = gptCtx->sbptWindows[i];
+        if(plu_rect_contains_point(&ptWindow->tOuterRectClipped, gptCtx->tIO._tMousePos))
+        {
+            gptCtx->ptHoveredWindow = ptWindow;
+
+            // scrolling
+            if(!(ptWindow->tFlags & PL_UI_WINDOW_FLAGS_AUTO_SIZE) && pl_get_mouse_wheel() != 0.0f)
+                gptCtx->ptWheelingWindow = ptWindow;
+        }
+    }
+
+    for(uint32_t i = 0; i < plu_sb_size(gptCtx->sbptWindows); i++)
+    {
+        plUiWindow* ptWindow = gptCtx->sbptWindows[i];
+        plRect tBoundBox = ptWindow->tOuterRectClipped;
+
+        float fTitleBarHeight = 0.0f;
+
+        if(ptWindow->ptRootWindow == ptWindow)
+        {
+            fTitleBarHeight = ptWindow->tTempData.fTitleBarHeight;
+
+            // add padding for resizing from borders
+            if(!(ptWindow->tFlags & (PL_UI_WINDOW_FLAGS_NO_RESIZE | PL_UI_WINDOW_FLAGS_AUTO_SIZE)))
+                tBoundBox = plu_rect_expand(&tBoundBox, 2.0f);
+        }
+
+        if(pl_is_mouse_hovering_rect(tBoundBox.tMin, tBoundBox.tMax))
+        {
+
+            // check if window is activated
+            if(pl_is_mouse_clicked(PL_MOUSE_BUTTON_LEFT, false) && gptCtx->ptHoveredWindow == ptWindow)
+            {
+                gptCtx->ptMovingWindow = NULL;
+                gptCtx->uActiveWindowId = ptWindow->ptRootWindow->uId;
+                gptCtx->ptActiveWindow = ptWindow;
+
+                gptCtx->tIO._abMouseOwned[PL_MOUSE_BUTTON_LEFT] = true;
+
+                const plRect tTitleBarHitRegion = {
+                    .tMin = {ptWindow->tPos.x + 2.0f, ptWindow->tPos.y + 2.0f},
+                    .tMax = {ptWindow->tPos.x + ptWindow->tSize.x - 2.0f, ptWindow->tPos.y + fTitleBarHeight}
+                };
+
+                // check if window titlebar is clicked
+                if(!(ptWindow->tFlags & PL_UI_WINDOW_FLAGS_NO_TITLE_BAR) && pl_is_mouse_hovering_rect(tTitleBarHitRegion.tMin, tTitleBarHitRegion.tMax))
+                    gptCtx->ptMovingWindow = ptWindow;
+
+                pl__focus_window(ptWindow);
+            }
+        }
+    }
+
+    // scroll window
     if(gptCtx->ptWheelingWindow)
     {
         gptCtx->ptWheelingWindow->tScroll.y -= pl_get_mouse_wheel() * 10.0f;
@@ -1116,6 +1125,9 @@ pl_end_window(void)
             }
         }
         gptCtx->ptCurrentWindow->tFullSize = ptWindow->tSize;
+
+        if(gptCtx->uActiveId >= uResizeHash && gptCtx->uActiveId < uResizeHash + 7 && pl_is_mouse_down(PL_MOUSE_BUTTON_LEFT))
+            pl__set_active_id(gptCtx->uActiveId, ptWindow);
     }
 
     gptCtx->ptCurrentWindow = NULL;
@@ -1246,6 +1258,9 @@ pl_end_child(void)
         ptWindow->tScroll.x = plu_clampf(0.0f, ptWindow->tScroll.x, ptWindow->tScrollMax.x);
         pl_reset_mouse_drag_delta(PL_MOUSE_BUTTON_LEFT);
     }
+
+    if((gptCtx->uActiveId == uHorizonatalScrollHash || gptCtx->uActiveId == uVerticalScrollHash) && pl_is_mouse_down(PL_MOUSE_BUTTON_LEFT))
+        pl__set_active_id(gptCtx->uActiveId, ptWindow);
 
     ptWindow->tFullSize = ptWindow->tSize;
     plu_sb_pop(gptCtx->sbuIdStack);
@@ -1930,15 +1945,18 @@ pl_is_item_hoverable(const plRect* ptBox, uint32_t uHash)
     if(gptCtx->ptHoveredWindow != gptCtx->ptCurrentWindow)
         return false;
 
-    // hovered & active ID must be some value but not ours
+    if(!pl_is_mouse_hovering_rect(ptBox->tMin, ptBox->tMax))
+        return false;
+
+    // check if another item is already hovered
     if(gptCtx->uHoveredId != 0 && gptCtx->uHoveredId != uHash)
         return false;
 
-    // active ID must be not used or ours
-    if(!(gptCtx->uActiveId == uHash || gptCtx->uActiveId == 0))
+    // check if another item is already active
+    if(gptCtx->uActiveId != 0 && gptCtx->uActiveId != uHash)
         return false;
 
-    return pl_is_mouse_hovering_rect(ptBox->tMin, ptBox->tMax);
+    return true;
 }
 
 bool
@@ -2063,6 +2081,7 @@ pl_begin_window_ex(const char* pcName, bool* pbOpen, plUiWindowFlags tFlags)
     }
 
     // seen this frame (obviously)
+    
     ptWindow->bActive = true;
     ptWindow->tFlags = tFlags;
 
@@ -2077,6 +2096,7 @@ pl_begin_window_ex(const char* pcName, bool* pbOpen, plUiWindowFlags tFlags)
 
         plu_sb_push(ptParentWindow->sbtChildWindows, ptWindow);
     }
+    gptCtx->ptCurrentWindow = ptWindow;
 
     // reset per frame window temporary data
     memset(&ptWindow->tTempData, 0, sizeof(plUiTempWindowData));
@@ -2098,7 +2118,6 @@ pl_begin_window_ex(const char* pcName, bool* pbOpen, plUiWindowFlags tFlags)
     }
 
     // position & size
-    const plVec2 tMousePos = pl_get_mouse_pos();
     plVec2 tStartPos = ptWindow->tPos;
 
     // next window calls
@@ -2169,45 +2188,50 @@ pl_begin_window_ex(const char* pcName, bool* pbOpen, plUiWindowFlags tFlags)
         float fTitleButtonStartPos = fTitleBarButtonRadius * 2.0f;
         if(pbOpen)
         {
+            const uint32_t uCloseHash = plu_str_hash("PL_CLOSE", 0, plu_sb_top(gptCtx->sbuIdStack));
             plVec2 tCloseCenterPos = plu_add_vec2(tStartPos, (plVec2){ptWindow->tSize.x - fTitleButtonStartPos, fTitleBarHeight / 2.0f});
+            plVec2 tCloseTLPos = {tCloseCenterPos.x - fTitleBarButtonRadius, tCloseCenterPos.y - fTitleBarButtonRadius};
             fTitleButtonStartPos += fTitleBarButtonRadius * 2.0f + gptCtx->tStyle.tItemSpacing.x;
-            if(pl_does_circle_contain_point(tCloseCenterPos, fTitleBarButtonRadius, tMousePos) && gptCtx->ptHoveredWindow == ptWindow)
-            {
-                pl_add_circle_filled(ptWindow->ptFgLayer, tCloseCenterPos, fTitleBarButtonRadius, (plVec4){1.0f, 0.0f, 0.0f, 1.0f}, 12);
-                if(pl_is_mouse_clicked(PL_MOUSE_BUTTON_LEFT, false)) gptCtx->uActiveId = 1;
-                else if(pl_is_mouse_released(PL_MOUSE_BUTTON_LEFT)) *pbOpen = false;       
-            }
-            else
-                pl_add_circle_filled(ptWindow->ptFgLayer, tCloseCenterPos, fTitleBarButtonRadius, (plVec4){0.5f, 0.0f, 0.0f, 1.0f}, 12);
+            
+            plRect tBoundingBox = plu_calculate_rect(tCloseTLPos, (plVec2){fTitleBarButtonRadius * 2.0f, fTitleBarButtonRadius * 2.0f});
+            bool bHovered = false;
+            bool bHeld = false;
+            bool bPressed = pl_button_behavior(&tBoundingBox, uCloseHash, &bHovered, &bHeld);
+
+            if(gptCtx->uActiveId == uCloseHash)       pl_add_circle_filled(ptWindow->ptFgLayer, tCloseCenterPos, fTitleBarButtonRadius, (plVec4){1.0f, 0.0f, 0.0f, 1.0f}, 12);
+            else if(gptCtx->uHoveredId == uCloseHash) pl_add_circle_filled(ptWindow->ptFgLayer, tCloseCenterPos, fTitleBarButtonRadius, (plVec4){1.0f, 0.0f, 0.0f, 1.0f}, 12);
+            else                                      pl_add_circle_filled(ptWindow->ptFgLayer, tCloseCenterPos, fTitleBarButtonRadius, (plVec4){0.5f, 0.0f, 0.0f, 1.0f}, 12);
+
+            if(bPressed)
+                *pbOpen = false;
         }
 
+        // draw collapse button
         if(!(tFlags & PL_UI_WINDOW_FLAGS_NO_COLLAPSE))
         {
-            // draw collapse button
-            plVec2 tCollapsingCenterPos = plu_add_vec2(tStartPos, (plVec2){ptWindow->tSize.x - fTitleButtonStartPos, fTitleBarHeight / 2.0f});
-            fTitleButtonStartPos += fTitleBarButtonRadius * 2.0f + gptCtx->tStyle.tItemSpacing.x;
+            const uint32_t uCollapseHash = plu_str_hash("PL_COLLAPSE", 0, plu_sb_top(gptCtx->sbuIdStack));
+            plVec2 tCloseCenterPos = plu_add_vec2(tStartPos, (plVec2){ptWindow->tSize.x - fTitleButtonStartPos, fTitleBarHeight / 2.0f});
+            plVec2 tCloseTLPos = {tCloseCenterPos.x - fTitleBarButtonRadius, tCloseCenterPos.y - fTitleBarButtonRadius};
+ 
+            plRect tBoundingBox = plu_calculate_rect(tCloseTLPos, (plVec2){fTitleBarButtonRadius * 2.0f, fTitleBarButtonRadius * 2.0f});
+            bool bHovered = false;
+            bool bHeld = false;
+            bool bPressed = pl_button_behavior(&tBoundingBox, uCollapseHash, &bHovered, &bHeld);
 
-            if(pl_does_circle_contain_point(tCollapsingCenterPos, fTitleBarButtonRadius, tMousePos) &&  gptCtx->ptHoveredWindow == ptWindow)
+            if(gptCtx->uActiveId == uCollapseHash)       pl_add_circle_filled(ptWindow->ptFgLayer, tCloseCenterPos, fTitleBarButtonRadius, (plVec4){1.0f, 1.0f, 0.0f, 1.0f}, 12);
+            else if(gptCtx->uHoveredId == uCollapseHash) pl_add_circle_filled(ptWindow->ptFgLayer, tCloseCenterPos, fTitleBarButtonRadius, (plVec4){1.0f, 1.0f, 0.0f, 1.0f}, 12);
+            else                                         pl_add_circle_filled(ptWindow->ptFgLayer, tCloseCenterPos, fTitleBarButtonRadius, (plVec4){0.5f, 0.5f, 0.0f, 1.0f}, 12);
+
+            if(bPressed)
             {
-                pl_add_circle_filled(ptWindow->ptFgLayer, tCollapsingCenterPos, fTitleBarButtonRadius, (plVec4){1.0f, 1.0f, 0.0f, 1.0f}, 12);
-
-                if(pl_is_mouse_clicked(PL_MOUSE_BUTTON_LEFT, false))
+                ptWindow->bCollapsed = !ptWindow->bCollapsed;
+                if(!ptWindow->bCollapsed)
                 {
-                    gptCtx->uActiveId = 2;
-                }
-                else if(pl_is_mouse_released(PL_MOUSE_BUTTON_LEFT))
-                {
-                    ptWindow->bCollapsed = !ptWindow->bCollapsed;
-                    if(!ptWindow->bCollapsed)
-                    {
-                        ptWindow->tSize = ptWindow->tFullSize;
-                        if(tFlags & PL_UI_WINDOW_FLAGS_AUTO_SIZE)
-                            ptWindow->uHideFrames = 2;
-                    }
+                    ptWindow->tSize = ptWindow->tFullSize;
+                    if(tFlags & PL_UI_WINDOW_FLAGS_AUTO_SIZE)
+                        ptWindow->uHideFrames = 2;
                 }
             }
-            else
-                pl_add_circle_filled(ptWindow->ptFgLayer, tCollapsingCenterPos, fTitleBarButtonRadius, (plVec4){0.5f, 0.5f, 0.0f, 1.0f}, 12);
         }
 
     }
@@ -2244,7 +2268,7 @@ pl_begin_window_ex(const char* pcName, bool* pbOpen, plUiWindowFlags tFlags)
     // reset next window flags
     gptCtx->tNextWindowData.tFlags = PL_NEXT_WINDOW_DATA_FLAGS_NONE;
 
-    gptCtx->ptCurrentWindow = ptWindow;
+    
     if(tFlags & PL_UI_WINDOW_FLAGS_CHILD_WINDOW)
     {
         ptWindow->bVisible = plu_rect_overlaps_rect(&ptWindow->tInnerClipRect, &ptParentWindow->tInnerClipRect);
@@ -2336,8 +2360,12 @@ pl_render_scrollbar(plUiWindow* ptWindow, uint32_t uHash, plUiAxis tAxis)
                 pl_add_rect_filled(ptWindow->ptBgLayer, tHandleBox.tMin, tHandleBox.tMax, gptCtx->tColorScheme.tScrollbarHoveredCol);
             else
                 pl_add_rect_filled(ptWindow->ptBgLayer, tHandleBox.tMin, tHandleBox.tMax, gptCtx->tColorScheme.tScrollbarHandleCol);
+
         }
     }
+
+    if(gptCtx->uActiveId == uHash && pl_is_mouse_down(PL_MOUSE_BUTTON_LEFT))
+        pl__set_active_id(uHash, ptWindow);
 }
 
 plVec2
@@ -2420,47 +2448,6 @@ void
 pl_submit_window(plUiWindow* ptWindow)
 {
     ptWindow->bActive = false; // no longer active (for next frame)
-
-    const size_t ulCurrentFrame = gptCtx->tIO.ulFrameCount;
-    // const plVec2 tMousePos = pl_get_mouse_pos();
-    const float fTitleBarHeight = gptCtx->tStyle.fFontSize + 2.0f * gptCtx->tStyle.fTitlePadding;
-
-    const plRect tTitleBarHitRegion = {
-        .tMin = {ptWindow->tPos.x + 2.0f, ptWindow->tPos.y + 2.0f},
-        .tMax = {ptWindow->tPos.x + ptWindow->tSize.x - 2.0f, ptWindow->tPos.y + fTitleBarHeight}
-    };
-
-    plRect tBoundBox = ptWindow->tOuterRectClipped;
-
-    // add padding for resizing from borders
-    if(!(ptWindow->tFlags & (PL_UI_WINDOW_FLAGS_NO_RESIZE | PL_UI_WINDOW_FLAGS_AUTO_SIZE)))
-        tBoundBox = plu_rect_expand(&tBoundBox, 2.0f);
-
-    // check if window is hovered
-    if(pl_is_mouse_hovering_rect(tBoundBox.tMin, tBoundBox.tMax))
-    {
-        gptCtx->ptHoveredWindow = ptWindow;
-
-        // check if window is activated
-        if(pl_is_mouse_clicked(PL_MOUSE_BUTTON_LEFT, false))
-        {
-            gptCtx->ptMovingWindow = NULL;
-            gptCtx->uActiveWindowId = ptWindow->ptParentWindow->uId;
-            gptCtx->bActiveIdJustActivated = true;
-            gptCtx->ptActiveWindow = ptWindow->ptParentWindow;
-
-            gptCtx->tIO._abMouseOwned[PL_MOUSE_BUTTON_LEFT] = true;
-
-            // check if window titlebar is clicked
-            if(!(ptWindow->tFlags & PL_UI_WINDOW_FLAGS_NO_TITLE_BAR) && pl_is_mouse_hovering_rect(tTitleBarHitRegion.tMin, tTitleBarHitRegion.tMax))
-                gptCtx->ptMovingWindow = ptWindow;
-        }
-
-        // scrolling
-        if(!(ptWindow->tFlags & PL_UI_WINDOW_FLAGS_AUTO_SIZE) && pl_get_mouse_wheel() != 0.0f)
-            gptCtx->ptWheelingWindow = ptWindow;
-    }
-
     plu_sb_push(gptCtx->sbptWindows, ptWindow);
     for(uint32_t j = 0; j < plu_sb_size(ptWindow->sbtChildWindows); j++)
         pl_submit_window(ptWindow->sbtChildWindows[j]);
@@ -2688,4 +2675,18 @@ pl_memory_free(void* pMemory)
     if(gptCtx)
         gptCtx->uMemoryAllocations--;
     free(pMemory);
+}
+
+void
+pl__set_active_id(uint32_t uHash, plUiWindow* ptWindow)
+{
+    gptCtx->bActiveIdJustActivated = gptCtx->uActiveId != uHash;
+    gptCtx->uActiveId = uHash;    
+    gptCtx->ptActiveWindow = ptWindow;
+
+    if(uHash)
+        gptCtx->uActiveIdIsAlive = uHash;
+
+    if(gptCtx->bActiveIdJustActivated && uHash)
+        pl__focus_window(ptWindow);
 }

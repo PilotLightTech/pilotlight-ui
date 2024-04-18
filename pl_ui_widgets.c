@@ -366,20 +366,20 @@ pl_button_behavior(const plRect* ptBox, uint32_t uHash, bool* pbOutHovered, bool
         gptCtx->tPrevItemData.bActive = true;
 
         if(bHeld)
-            gptCtx->uNextActiveId = uHash;
+            pl__set_active_id(uHash, ptWindow);
     }
 
     if(bHovered)
     {
         if(pl_is_mouse_clicked(PL_MOUSE_BUTTON_LEFT, false))
         {
-            gptCtx->uNextActiveId = uHash;
+            pl__set_active_id(uHash, ptWindow);
             gptCtx->tPrevItemData.bActive = true;
         }
         else if(pl_is_mouse_released(PL_MOUSE_BUTTON_LEFT))
         {
-            gptCtx->uNextActiveId = 0;
             bPressed = uHash == gptCtx->uActiveId;
+            pl__set_active_id(0, ptWindow);
         }
     }
 
@@ -838,7 +838,7 @@ pl_begin_tab(const char* pcText)
         ptTabBar->uNextValue = uHash;
     }
 
-    if(gptCtx->uActiveId== uHash)        pl_add_rect_filled(ptWindow->ptFgLayer, tStartPos, tBoundingBox.tMax, gptCtx->tColorScheme.tButtonActiveCol);
+    if(gptCtx->uActiveId == uHash)        pl_add_rect_filled(ptWindow->ptFgLayer, tStartPos, tBoundingBox.tMax, gptCtx->tColorScheme.tButtonActiveCol);
     else if(gptCtx->uHoveredId == uHash) pl_add_rect_filled(ptWindow->ptFgLayer, tStartPos, tBoundingBox.tMax, gptCtx->tColorScheme.tButtonHoveredCol);
     else if(ptTabBar->uValue == uHash)   pl_add_rect_filled(ptWindow->ptFgLayer, tStartPos, tBoundingBox.tMax, gptCtx->tColorScheme.tButtonActiveCol);
     else                                 pl_add_rect_filled(ptWindow->ptFgLayer, tStartPos, tBoundingBox.tMax, gptCtx->tColorScheme.tButtonCol);
@@ -1140,37 +1140,14 @@ pl_input_text_ex(const char* pcLabel, const char* pcHint, char* pcBuffer, size_t
     {
         PL_UI_ASSERT(ptState && ptState->uId == uHash);
         gptCtx->tPrevItemData.bActive = true;
-        gptCtx->uNextActiveId = uHash;
-        // SetActiveID(id, window);
+        pl__set_active_id(uHash, ptWindow);
         // SetFocusID(id, window);
         // FocusWindow(window);
-    }
-    if (gptCtx->uActiveId == uHash)
-    {
-        gptCtx->tPrevItemData.bActive = true;
-        gptCtx->uNextActiveId = uHash;
-        // Declare some inputs, the other are registered and polled via Shortcut() routing system.
-        // if (bUserClicked)
-        //     SetKeyOwner(PL_KEY_MouseLeft, id);
-        // g.ActiveIdUsingNavDirMask |= (1 << ImGuiDir_Left) | (1 << ImGuiDir_Right);
-        // if (bIsMultiLine || (flags & ImGuiInputTextFlags_CallbackHistory))
-        //     g.ActiveIdUsingNavDirMask |= (1 << ImGuiDir_Up) | (1 << ImGuiDir_Down);
-        // SetKeyOwner(PL_KEY_Home, id);
-        // SetKeyOwner(PL_KEY_End, id);
-        // if (bIsMultiLine)
-        // {
-        //     SetKeyOwner(PL_KEY_PageUp, id);
-        //     SetKeyOwner(PL_KEY_PageDown, id);
-        // }
-        // if (bIsOsX)
-        //     SetKeyOwner(ImGuiMod_Alt, id);
-        // if (flags & (ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_AllowTabInput)) // Disable keyboard tabbing out as we will use the \t character.
-        //     SetShortcutRouting(PL_KEY_Tab, id);
     }
 
     // We have an edge case if ActiveId was set through another widget (e.g. widget being swapped), clear id immediately (don't wait until the end of the function)
     if (gptCtx->uActiveId == uHash && ptState == NULL)
-        gptCtx->uNextActiveId = 0;
+        pl__set_active_id(0, ptWindow);
 
     // Release focus when we click outside
     if (gptCtx->uActiveId == uHash && pl_is_mouse_clicked(0, false) && !bInitState && !bInitMakeActive) //-V560
@@ -1672,9 +1649,12 @@ pl_input_text_ex(const char* pcLabel, const char* pcHint, char* pcBuffer, size_t
     // Release active ID at the end of the function (so e.g. pressing Return still does a final application of the value)
     // Otherwise request text input ahead for next frame.
     if (gptCtx->uActiveId == uHash && bClearActiveId)
-        gptCtx->uNextActiveId = 0;
+        pl__set_active_id(0, ptWindow);
     else if (gptCtx->uActiveId == uHash)
+    {
+        pl__set_active_id(uHash, ptWindow);
         gptCtx->tIO.bWantTextInput = true;
+    }
 
     // Render frame
     if (!bIsMultiLine)
@@ -2007,6 +1987,7 @@ pl_slider_float_f(const char* pcLabel, float* pfValue, float fMin, float fMax, c
             if(pl_get_mouse_pos().x < tBoundingBox.tMin.x) *pfValue = fMin;
             if(pl_get_mouse_pos().x > tBoundingBox.tMax.x) *pfValue = fMax;
             pl_reset_mouse_drag_delta(PL_MOUSE_BUTTON_LEFT);
+            pl__set_active_id(uHash, ptWindow);
         }
     }
     pl_advance_cursor(tWidgetSize.x, tWidgetSize.y);
@@ -2083,6 +2064,7 @@ pl_slider_int_f(const char* pcLabel, int* piValue, int iMin, int iMax, const cha
                 (*piValue)--;
 
             *piValue = plu_clampi(iMin, *piValue, iMax);
+            pl__set_active_id(uHash, ptWindow);
         }
     }
     pl_advance_cursor(tWidgetSize.x, tWidgetSize.y);
@@ -2142,6 +2124,7 @@ pl_drag_float_f(const char* pcLabel, float* pfValue, float fSpeed, float fMin, f
         {
             *pfValue = pl_get_mouse_drag_delta(PL_MOUSE_BUTTON_LEFT, 1.0f).x * fSpeed;
             *pfValue = plu_clampf(fMin, *pfValue, fMax);
+            pl__set_active_id(uHash, ptWindow);
         }
     }
     pl_advance_cursor(tWidgetSize.x, tWidgetSize.y);

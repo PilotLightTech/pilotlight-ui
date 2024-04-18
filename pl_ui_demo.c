@@ -130,6 +130,7 @@ pl_show_debug_window(bool* pbOpen)
         {
             pl_text("Windows");
             pl_indent(0.0f);
+            pl_text("Active Window: %s", gptCtx->ptActiveWindow ? gptCtx->ptActiveWindow->pcName : "NULL");
             pl_text("Hovered Window: %s", gptCtx->ptHoveredWindow ? gptCtx->ptHoveredWindow->pcName : "NULL");
             pl_text("Moving Window:  %s", gptCtx->ptMovingWindow ? gptCtx->ptMovingWindow->pcName : "NULL");
             pl_text("Sizing Window:  %s", gptCtx->ptSizingWindow ? gptCtx->ptSizingWindow->pcName : "NULL");
@@ -138,8 +139,9 @@ pl_show_debug_window(bool* pbOpen)
             pl_unindent(0.0f);
             pl_text("Items");
             pl_indent(0.0f);
-            pl_text("Active ID:      %u", gptCtx->uActiveId);
-            pl_text("Hovered ID:     %u", gptCtx->uHoveredId);
+            pl_text("Active Window ID: %u", gptCtx->uActiveWindowId);
+            pl_text("Active ID:        %u", gptCtx->uActiveId);
+            pl_text("Hovered ID:       %u", gptCtx->uHoveredId);
             pl_unindent(0.0f);
             pl_tree_pop();
         }

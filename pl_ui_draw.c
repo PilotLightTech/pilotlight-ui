@@ -774,10 +774,8 @@ pl_add_font_from_memory_ttf(plFontAtlas* atlas, plFontConfig config, void* data)
     if(font.tConfig.bSdf) font.tConfig.fSdfPixelDistScale = (float)font.tConfig.ucOnEdgeValue / (float) font.tConfig.iSdfPadding;
 
     // calculate base line spacing
-    int ascentBias = -1;
-    int descentBias = -1;
-    font.fAscent = floorf(ascent * prep.scale - ascentBias);
-    font.fDescent = floorf(descent * prep.scale - descentBias);
+    font.fAscent = ceilf(ascent * prep.scale);
+    font.fDescent = floorf(descent * prep.scale);
     font.fLineSpacing = (font.fAscent - font.fDescent + prep.scale * (float)lineGap);
 
     // convert individual chars to ranges

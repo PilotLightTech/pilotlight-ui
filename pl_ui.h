@@ -1,8 +1,8 @@
 // pilotlight ui
 
 // library version
-#define PL_UI_VERSION    "0.3.0"
-#define PL_UI_VERSION_NUM 000300
+#define PL_UI_VERSION    "0.3.1"
+#define PL_UI_VERSION_NUM 000301
 
 /*
 Index of this file:
@@ -327,10 +327,6 @@ void         pl_add_mouse_pos_event   (float fX, float fY);
 void         pl_add_mouse_button_event(int iButton, bool bDown);
 void         pl_add_mouse_wheel_event (float fX, float fY);
 void         pl_clear_input_characters(void);
-
-// config file utilities
-void         pl_load_config_file(const char* pcFileName);
-void         pl_save_config_file(const char* pcFileName);
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~drawing~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -776,8 +772,6 @@ typedef struct _plIO
     float       fMouseDoubleClickMaxDist; // default 6.0f
     float       fKeyRepeatDelay;          // default 0.275f
     float       fKeyRepeatRate;           // default 0.050f
-    float       fConfigSavingRate;        // default 5.0f
-    const char* pcConfigFileName;         // default "pl_config.ini"
     float       afMainViewportSize[2];
     float       afMainFramebufferScale[2];
     void*       pUserData;
