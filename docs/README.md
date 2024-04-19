@@ -8,8 +8,8 @@
 <h1></h1>
 
 <p align="center">
-   <a href="https://github.com/hoffstadt/pilotlight-ui/actions?workflow=Build"><img src="https://github.com/hoffstadt/pilotlight-ui/workflows/Build/badge.svg?branch=master" alt="build"></a>
-   <a href="https://github.com/hoffstadt/pilotlight-ui/actions?workflow=Static%20Analysis"><img src="https://github.com/hoffstadt/pilotlight-ui/workflows/Static%20Analysis/badge.svg?branch=master" alt="static-analysis"></a>
+   <a href="https://github.com/PilotLightTech/pilotlight-ui/actions?workflow=Build"><img src="https://github.com/PilotLightTech/pilotlight-ui/actions/workflows/build.yml/badge.svg?branch=master" alt="build"></a>
+   <a href="https://github.com/PilotLightTech/pilotlight-ui/actions?workflow=Static%20Analysis"><img src="https://github.com/PilotLightTech/pilotlight-ui/actions/workflows/static-analysis.yml/badge.svg?branch=master" alt="static-analysis"></a>
 </p>
 
 <p align="center">
@@ -19,16 +19,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/hoffstadt/pilotlight-assets"><img src="https://github.com/hoffstadt/pilotlight-assets/blob/master/images/ui0.PNG" alt="Tooling Image"></a>
+  <a href="https://github.com/PilotLightTech/pilotlight-assets"><img src="https://github.com/PilotLightTech/pilotlight-assets/blob/master/images/ui0.PNG" alt="Tooling Image"></a>
 </p>
 
 ## Developer Notes
-Information for developers can be found in the [wiki](https://github.com/hoffstadt/pilotlight-ui/wiki). This includes:
-* [contributing](https://github.com/hoffstadt/pilotlight/wiki/Contributing)
-* [style guide](https://github.com/hoffstadt/pilotlight/wiki/Style-Guide)
+Information for developers can be found in the [wiki](https://github.com/PilotLightTech/pilotlight-ui/wiki). This includes:
+* [contributing](https://github.com/PilotLightTech/pilotlight/wiki/Contributing)
+* [style guide](https://github.com/PilotLightTech/pilotlight/wiki/Style-Guide)
 
 ## License
-**Pilot Light UI** is licensed under the [MIT License](https://github.com/hoffstadt/pilotlight-ui/blob/master/LICENSE).
+**Pilot Light UI** is licensed under the [MIT License](https://github.com/PilotLightTech/pilotlight-ui/blob/master/LICENSE).
 
 ## Inspiration
 This project is inspired by:
