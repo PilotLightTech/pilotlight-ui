@@ -1,8 +1,8 @@
 // pilotlight ui
 
 // library version
-#define PL_UI_VERSION    "0.3.1"
-#define PL_UI_VERSION_NUM 000301
+#define PL_UI_VERSION    "0.3.2"
+#define PL_UI_VERSION_NUM 000302
 
 /*
 Index of this file:
@@ -792,6 +792,12 @@ typedef struct _plIO
     void        (*set_clipboard_text_fn)(void* pUserData, const char* pcText);
     void*       pClipboardUserData;
     char*       sbcClipboardData;
+
+    //------------------------------------------------------------------
+    // Input/Output
+    //------------------------------------------------------------------
+
+    bool bRunning;
 
     //------------------------------------------------------------------
     // Output

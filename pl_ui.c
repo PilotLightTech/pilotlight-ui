@@ -383,6 +383,7 @@ pl_create_context(void)
     gptCtx->tIO.afMainViewportSize[0] = 500.0f;
     gptCtx->tIO.afMainViewportSize[1] = 500.0f;
     gptCtx->tIO.bViewportSizeChanged = true;
+    gptCtx->tIO.bRunning = true;
 
     gptCtx->tFrameBufferScale.x = 1.0f;
     gptCtx->tFrameBufferScale.y = 1.0f;
